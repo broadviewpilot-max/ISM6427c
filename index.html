@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Boca Weather</title>
+  <meta name="description" content="Live weather for Boca Raton and anywhere else, powered by Open-Meteo.">
+  <meta name="theme-color" content="#f4f7fb">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛅</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Apply saved theme before first paint to avoid a flash of the wrong theme.
+    try {
+      var t = localStorage.getItem('theme');
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true">⛅</span>
+      <span class="brand-name">Boca Weather</span>
+    </div>
+    <div class="theme-switch" role="radiogroup" aria-label="Theme">
+      <button type="button" role="radio" data-theme-choice="light" aria-checked="false" title="Light theme">
+        <span aria-hidden="true">☀️</span><span class="label">Light</span>
+      </button>
+      <button type="button" role="radio" data-theme-choice="dark" aria-checked="false" title="Dark theme">
+        <span aria-hidden="true">🌙</span><span class="label">Dark</span>
+      </button>
+      <button type="button" role="radio" data-theme-choice="system" aria-checked="true" title="Match system theme">
+        <span aria-hidden="true">💻</span><span class="label">System</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="greeting" aria-live="polite">
+      <h1 id="greeting">Welcome, Sean</h1>
+      <p id="greeting-sub" class="muted">Here's your live weather picture.</p>
+    </section>
+
+    <section class="controls">
+      <form id="search-form" class="search" role="search" autocomplete="off">
+        <label for="search-input" class="sr-only">Search for a city</label>
+        <input id="search-input" type="search" placeholder="Search city (e.g. Miami, Denver, KJFK area…)" enterkeyhint="search">
+        <button type="submit" class="btn">Search</button>
+        <ul id="search-results" class="search-results" role="listbox" hidden></ul>
+      </form>
+      <div class="control-row">
+        <button type="button" id="btn-home" class="btn btn-ghost" title="Back to Boca Raton">🏠 Boca Raton</button>
+        <button type="button" id="btn-locate" class="btn btn-ghost" title="Use my current location">📍 My location</button>
+        <div class="unit-switch" role="radiogroup" aria-label="Units">
+          <button type="button" role="radio" data-unit="imperial" aria-checked="true">°F</button>
+          <button type="button" role="radio" data-unit="metric" aria-checked="false">°C</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="status" class="status" role="status" hidden></div>
+
+    <section id="current" class="card current" aria-labelledby="loc-name">
+      <div class="current-head">
+        <div>
+          <h2 id="loc-name" class="loc-name">Boca Raton, Florida</h2>
+          <p id="loc-time" class="muted small"></p>
+        </div>
+        <button type="button" id="btn-refresh" class="btn btn-ghost btn-icon" title="Refresh now" aria-label="Refresh now">⟳</button>
+      </div>
+      <div class="current-main">
+        <div class="current-icon" id="cur-icon" aria-hidden="true">⛅</div>
+        <div>
+          <div class="current-temp"><span id="cur-temp">--</span><span class="deg" id="cur-unit">°F</span></div>
+          <div class="current-desc" id="cur-desc">Loading…</div>
+          <div class="muted small">Feels like <span id="cur-feels">--</span> · H <span id="cur-hi">--</span> / L <span id="cur-lo">--</span></div>
+        </div>
+      </div>
+      <dl class="metrics">
+        <div><dt>Wind</dt><dd id="m-wind">--</dd></div>
+        <div><dt>Gusts</dt><dd id="m-gusts">--</dd></div>
+        <div><dt>Humidity</dt><dd id="m-humidity">--</dd></div>
+        <div><dt>Dew point</dt><dd id="m-dew">--</dd></div>
+        <div><dt>Pressure</dt><dd id="m-pressure">--</dd></div>
+        <div><dt>Visibility</dt><dd id="m-vis">--</dd></div>
+        <div><dt>Cloud cover</dt><dd id="m-cloud">--</dd></div>
+        <div><dt>UV index</dt><dd id="m-uv">--</dd></div>
+        <div><dt>Sunrise</dt><dd id="m-sunrise">--</dd></div>
+        <div><dt>Sunset</dt><dd id="m-sunset">--</dd></div>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h3 class="card-title">Next 24 hours</h3>
+      <div id="hourly" class="hourly" tabindex="0" aria-label="Hourly forecast, scrollable"></div>
+    </section>
+
+    <section class="card">
+      <h3 class="card-title">7-day forecast</h3>
+      <ul id="daily" class="daily"></ul>
+    </section>
+
+    <footer class="footer muted small">
+      <p>Live data from <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0). Updated <span id="updated">--</span>; refreshes every 10 minutes.</p>
+      <p>Not for flight planning. Use official aviation weather sources for operational decisions.</p>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
