@@ -74,7 +74,7 @@ Local records are stored (still encrypted) in `.data/`, which is git-ignored. Se
 
 ## Design
 
-Default light theme uses the Bahamian flag palette (aquamarine, gold, black); a Dark toggle in the header is remembered per browser. Layout adapts from desktop to tablet to phone (tables become cards, navigation becomes a drawer). Reports print cleanly to PDF. The logo mark is a simple placeholder in `public/favicon.svg`; replace it with the Foundation's official artwork.
+Default light theme uses the Bahamian flag palette (aquamarine, gold, black); a Dark toggle in the header is remembered per browser. Layout adapts from desktop to tablet to phone (tables become cards, navigation becomes a drawer). Reports print cleanly to PDF. The Foundation logo is `public/logo.png` (transparent background, made for dark surfaces), shown in the header and on the sign-in page. The browser-tab icon is a simple mark in `public/favicon.svg`.
 
 ## Repository layout
 

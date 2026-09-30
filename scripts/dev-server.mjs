@@ -25,8 +25,8 @@ const blobs = {
   },
 };
 const handle = createHandler({ env, blobs });
-const PUBLIC = new Set(['/login.html', '/login.js', '/theme.js', '/styles.css', '/favicon.svg', '/robots.txt']);
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.txt': 'text/plain' };
+const PUBLIC = new Set(['/login.html', '/login.js', '/theme.js', '/styles.css', '/favicon.svg', '/logo.png', '/robots.txt']);
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain' };
 
 http.createServer(async (nreq, nres) => {
   const chunks = [];

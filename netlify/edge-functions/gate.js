@@ -2,7 +2,7 @@
 // only things served are the sign-in page and the sign-in API call.
 import { gateConfigured, isAuthed } from '../lib/auth.mjs';
 
-const PUBLIC = new Set(['/login.html', '/login.js', '/theme.js', '/styles.css', '/favicon.svg', '/robots.txt', '/api/login']);
+const PUBLIC = new Set(['/login.html', '/login.js', '/theme.js', '/styles.css', '/favicon.svg', '/logo.png', '/robots.txt', '/api/login']);
 
 export default async (request, context) => {
   const env = { APP_PASSWORD: Netlify.env.get('APP_PASSWORD'), SESSION_SECRET: Netlify.env.get('SESSION_SECRET'), SESSION_DAYS: Netlify.env.get('SESSION_DAYS') };
