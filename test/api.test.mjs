@@ -97,3 +97,14 @@ test('settings, audit, backup', async () => {
   const b = await c.call('GET', '/api/backup');
   assert.ok(Array.isArray(b.body.participants) && b.body.settings.stages.length === 2);
 });
+
+test('config error names the variable, and the data key tolerates quotes/spaces', async () => {
+  const bad = makeClient({ ...ENV, DATA_ENCRYPTION_KEY: 'not-a-key' });
+  const r = await bad.call('GET', '/api/session');
+  assert.equal(r.status, 503);
+  assert.match(r.body.error, /DATA_ENCRYPTION_KEY/);
+  assert.doesNotMatch(r.body.error, /APP_PASSWORD/);
+  const quoted = makeClient({ ...ENV, DATA_ENCRYPTION_KEY: `  "${ENV.DATA_ENCRYPTION_KEY}"  ` });
+  assert.equal((await quoted.login()).status, 200);
+  assert.equal((await quoted.call('POST', '/api/mentors', { name: 'X' })).status, 201);
+});

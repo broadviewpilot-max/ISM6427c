@@ -6,9 +6,12 @@ const dec = new TextDecoder();
 const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
+// Tolerate stray whitespace or quote marks from copy and paste.
+const rawKey = (env) => (env.DATA_ENCRYPTION_KEY || '').trim().replace(/^["']+|["']+$/g, '').trim();
+
 export function dataKeyConfigured(env) {
   try {
-    return !!env.DATA_ENCRYPTION_KEY && fromB64(env.DATA_ENCRYPTION_KEY).length === 32;
+    return !!rawKey(env) && fromB64(rawKey(env)).length === 32;
   } catch {
     return false;
   }
@@ -16,7 +19,7 @@ export function dataKeyConfigured(env) {
 
 async function key(env) {
   if (!dataKeyConfigured(env)) throw new Error('DATA_ENCRYPTION_KEY must be a base64-encoded 32-byte key');
-  return crypto.subtle.importKey('raw', fromB64(env.DATA_ENCRYPTION_KEY), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  return crypto.subtle.importKey('raw', fromB64(rawKey(env)), 'AES-GCM', false, ['encrypt', 'decrypt']);
 }
 
 // `aad` binds a ciphertext to its storage key so records cannot be swapped.

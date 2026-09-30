@@ -43,7 +43,11 @@ export function createHandler({ env, blobs }) {
 
   return async function handle(req, ctx) {
     if (!gateConfigured(env) || !dataKeyConfigured(env)) {
-      return fail(503, 'The application is not configured. Set APP_PASSWORD, SESSION_SECRET and DATA_ENCRYPTION_KEY in Netlify.');
+      const problems = [];
+      if (!env.APP_PASSWORD || env.APP_PASSWORD.length < 8) problems.push('APP_PASSWORD (missing, or shorter than 8 characters)');
+      if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) problems.push('SESSION_SECRET (missing, or shorter than 32 characters)');
+      if (!dataKeyConfigured(env)) problems.push('DATA_ENCRYPTION_KEY (missing, or not a base64 32-byte key)');
+      return fail(503, `The application is not configured. Check these variables in Netlify, then redeploy: ${problems.join('; ')}.`);
     }
     const url = new URL(req.url);
     const parts = url.pathname.replace(/^\/api\/?/, '').split('/').filter(Boolean);
