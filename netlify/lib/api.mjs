@@ -1,5 +1,5 @@
 import { checkPassword, gateConfigured, isAuthed, makeToken, sessionCookie, sha256Hex } from './auth.mjs';
-import { dataKeyConfigured } from './crypto.mjs';
+import { dataKeyConfigured, dataKeyProblem } from './crypto.mjs';
 import { createRepo } from './store.mjs';
 import { COLLECTIONS, DEFAULT_SETTINGS, ValidationError, sanitize, sanitizeSettings } from './schema.mjs';
 
@@ -46,7 +46,7 @@ export function createHandler({ env, blobs }) {
       const problems = [];
       if (!env.APP_PASSWORD || env.APP_PASSWORD.length < 8) problems.push('APP_PASSWORD (missing, or shorter than 8 characters)');
       if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) problems.push('SESSION_SECRET (missing, or shorter than 32 characters)');
-      if (!dataKeyConfigured(env)) problems.push('DATA_ENCRYPTION_KEY (missing, or not a base64 32-byte key)');
+      if (!dataKeyConfigured(env)) problems.push(dataKeyProblem(env));
       return fail(503, `The application is not configured. Check these variables in Netlify, then redeploy: ${problems.join('; ')}.`);
     }
     const url = new URL(req.url);

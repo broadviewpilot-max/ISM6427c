@@ -41,3 +41,15 @@ export async function decryptJSON(env, blob, aad) {
   );
   return JSON.parse(dec.decode(pt));
 }
+
+// Safe description of the key's state for setup errors (never includes the value).
+export function dataKeyProblem(env) {
+  const k = rawKey(env);
+  if (!k) return 'DATA_ENCRYPTION_KEY is not set (check the name is spelled exactly, then redeploy)';
+  try {
+    const n = fromB64(k).length;
+    return n === 32 ? '' : `DATA_ENCRYPTION_KEY is set but decodes to ${n} bytes; it must decode to exactly 32 (generate a new one with the Console line)`;
+  } catch {
+    return `DATA_ENCRYPTION_KEY is set (${k.length} characters) but is not valid base64; generate a new one with the Console line`;
+  }
+}
