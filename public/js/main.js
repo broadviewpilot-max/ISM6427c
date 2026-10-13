@@ -1,10 +1,11 @@
 import { mount, h, badge, fullName, isMinor, daysFrom, fmtDate, money, toast, table, field, readForm, today } from './ui.js';
-import { api } from './api.js';
+import { api, can } from './api.js';
 import { pageHead } from './common.js';
 import * as participants from './participants.js';
 import * as mentors from './mentors.js';
 import * as sponsors from './sponsors.js';
 import * as reports from './reports.js';
+import * as admin from './admin.js';
 
 // Greeting shown on the dashboard.
 const USER = { name: 'Sean Smith', first: 'Sean', title: 'Executive Director' };
@@ -12,19 +13,25 @@ const IDLE_MS = 30 * 60 * 1000;
 // Who is signed in: { kind: 'board' } for the shared password, or an email user's profile.
 let ME = { kind: 'board' };
 
+// perm: shown only to people holding it. email: shown only to email accounts.
 const NAV = [
-  ['#/', 'Dashboard'],
-  ['group', 'Modules'],
-  ['#/participants', 'Participants'],
-  ['#/mentors', 'Mentors'],
-  ['#/sponsors', 'Sponsors & Donors'],
-  ['#/reports', 'Reporting'],
-  ['group', 'Planned'],
-  ['#/grants', 'Grant Tracking', true],
-  ['#/events', 'Event Management', true],
-  ['group', 'Administration'],
-  ['#/settings', 'Settings'],
+  { href: '#/', label: 'Dashboard' },
+  { group: 'Modules' },
+  { href: '#/participants', label: 'Participants', perm: 'data:read' },
+  { href: '#/mentors', label: 'Mentors', perm: 'data:read' },
+  { href: '#/sponsors', label: 'Sponsors & Donors', perm: 'data:read' },
+  { href: '#/reports', label: 'Reporting', perm: 'data:read' },
+  { group: 'Planned' },
+  { href: '#/grants', label: 'Grant Tracking', soon: true, perm: 'data:read' },
+  { href: '#/events', label: 'Event Management', soon: true, perm: 'data:read' },
+  { group: 'Account' },
+  { href: '#/profile', label: 'My profile', email: true },
+  { group: 'Administration' },
+  { href: '#/settings', label: 'Settings', perm: 'settings:write' },
+  { href: '#/admin', label: 'Administration', perm: 'admin' },
 ];
+// What each page needs; the server enforces the same rules.
+const PAGE_PERM = { participants: 'data:read', mentors: 'data:read', sponsors: 'data:read', reports: 'data:read', grants: 'data:read', events: 'data:read', settings: 'settings:write', admin: 'admin' };
 
 const view = document.getElementById('view');
 const navEl = document.getElementById('navlinks');
@@ -94,7 +101,8 @@ async function profile(root) {
       field({ label: 'Name', name: 'displayName', value: me.displayName, required: true, hint: 'Shown in the activity log next to changes you make.' }),
       field({ label: 'Job title or role', name: 'jobTitle', value: me.jobTitle }),
       field({ label: 'Phone', name: 'phone', value: me.phone }),
-      field({ label: 'Email (from your sign-in)', name: 'email', value: me.email, readonly: true, hint: 'To change your email, ask an administrator.' })),
+      field({ label: 'Email (from your sign-in)', name: 'email', value: me.email, readonly: true, hint: 'To change your email, ask an administrator.' }),
+      field({ label: 'Role', name: 'role', value: ROLE_NAME[me.role] || me.role, readonly: true, hint: 'Only an administrator can change this.' })),
     h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'submit' }, 'Save profile')));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -103,6 +111,15 @@ async function profile(root) {
   });
   mount(root, pageHead('My profile'), form);
 }
+
+function welcome(root) {
+  mount(root, h('section', { class: 'hero' }, ...heroText()),
+    h('div', { class: 'card accent' }, h('h2', {}, 'Your account'),
+      h('p', {}, 'You are signed in with the ', h('strong', {}, ROLE_NAME[ME.role] || 'User'), ' role. This role covers your own profile; it does not include the Foundation’s participant, mentor or donor records.'),
+      h('p', {}, 'If you need access to more, ask an administrator to change your role.'),
+      ME.kind === 'email' && h('div', { class: 'actions' }, h('a', { class: 'btn primary', href: '#/profile' }, 'Open my profile'))));
+}
+const ROLE_NAME = { administrator: 'Administrator', employee: 'Employee', user: 'User', board: 'Board password' };
 
 async function settings(root) {
   const s = await api.settings(true);
@@ -132,7 +149,7 @@ async function settings(root) {
 }
 
 const ROUTES = {
-  '': dashboard,
+  '': (r) => (can('data:read') ? dashboard(r) : welcome(r)),
   participants: (r, id) => (id ? participants.edit(r, id) : participants.list(r)),
   mentors: (r, id) => (id ? mentors.edit(r, id) : mentors.list(r)),
   sponsors: (r, id) => (id ? sponsors.edit(r, id) : sponsors.list(r)),
@@ -141,6 +158,7 @@ const ROUTES = {
   events: planned('Event Management', 'Intended to manage Foundation events, registrations and volunteers.'),
   settings,
   profile,
+  admin: admin.render,
 };
 
 async function route() {
@@ -149,6 +167,7 @@ async function route() {
   const hash = seg ? '#/' + seg : '#/';
   for (const a of navEl.querySelectorAll('a')) a.toggleAttribute('aria-current', a.getAttribute('href') === hash) && a.setAttribute('aria-current', 'page');
   const fn = ROUTES[seg || ''];
+  if (PAGE_PERM[seg] && !can(PAGE_PERM[seg])) { view.replaceChildren(h('div', { class: 'banner err' }, 'You do not have access to this page.')); return; }
   if (!fn) { view.replaceChildren(h('div', { class: 'empty' }, 'Page not found.')); return; }
   view.replaceChildren(h('div', { class: 'empty' }, 'Loading…'));
   try { await fn(view, id); } catch (e) { view.replaceChildren(h('div', { class: 'banner err' }, e.message || 'Could not load this page.')); }
@@ -157,7 +176,17 @@ async function route() {
 }
 
 // Shell wiring
-navEl.replaceChildren(...NAV.map(([href, label, soon]) => (href === 'group' ? h('div', { class: 'group' }, label) : h('a', { href }, label, soon && h('span', { class: 'soon' }, 'Planned')))));
+function buildNav() {
+  const out = [];
+  let group = null;
+  for (const n of NAV) {
+    if (n.group) { group = n.group; continue; }
+    if ((n.perm && !can(n.perm)) || (n.email && ME.kind !== 'email')) continue;
+    if (group) { out.push(h('div', { class: 'group' }, group)); group = null; }
+    out.push(h('a', { href: n.href }, n.label, n.soon && h('span', { class: 'soon' }, 'Planned')));
+  }
+  navEl.replaceChildren(...out);
+}
 const menu = document.getElementById('menu');
 menu.addEventListener('click', () => { const o = document.body.classList.toggle('nav-open'); menu.setAttribute('aria-expanded', String(o)); });
 document.getElementById('scrim').addEventListener('click', () => document.body.classList.remove('nav-open'));
@@ -176,6 +205,7 @@ const meEl = document.getElementById('me');
 function paintMe() {
   meEl.hidden = ME.kind !== 'email';
   meEl.textContent = ME.displayName || ME.email || 'My profile';
+  meEl.title = `${ROLE_NAME[ME.role] || 'Signed in'} · my profile`;
 }
 
 async function signOut() { await api.logout(); location.replace('/login.html'); }
@@ -188,4 +218,4 @@ const resetIdle = () => { clearTimeout(idle); idle = setTimeout(signOut, IDLE_MS
 resetIdle();
 
 addEventListener('hashchange', route);
-api.profile(true).then((p) => { ME = p; paintMe(); }).catch(() => {}).finally(route);
+api.profile(true).then((p) => { ME = p; paintMe(); }).catch(() => {}).finally(() => { buildNav(); route(); });

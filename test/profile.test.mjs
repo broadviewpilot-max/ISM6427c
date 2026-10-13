@@ -20,7 +20,9 @@ const signIn = async (c, who) => assert.equal((await c.call('POST', '/api/login-
 test('board-password session: profile GET says "board", PUT is refused', async () => {
   const c = makeClient(EMAIL_ENV, fakeSupabase);
   await c.login();
-  assert.deepEqual((await c.call('GET', '/api/profile')).body, { kind: 'board' });
+  const me = (await c.call('GET', '/api/profile')).body;
+  assert.equal(me.kind, 'board');
+  assert.equal(me.role, 'board');
   assert.equal((await c.call('PUT', '/api/profile', { displayName: 'X' })).status, 403);
 });
 
@@ -33,7 +35,7 @@ test('profile requires a session', async () => {
 test('first email sign-in creates an empty profile holding the email', async () => {
   const c = makeClient(EMAIL_ENV, fakeSupabase);
   await signIn(c, 'pat@example.org');
-  assert.deepEqual((await c.call('GET', '/api/profile')).body, { kind: 'email', email: 'pat@example.org', displayName: '', jobTitle: '', phone: '' });
+  assert.deepEqual((await c.call('GET', '/api/profile')).body, { kind: 'email', email: 'pat@example.org', displayName: '', jobTitle: '', phone: '', role: 'user', permissions: [] });
 });
 
 test('a person can save their profile; it persists across sign-ins; email cannot be changed', async () => {
@@ -46,7 +48,7 @@ test('a person can save their profile; it persists across sign-ins; email cannot
   assert.equal(put.body.email, 'pat@example.org');
   const again = makeClient(EMAIL_ENV, fakeSupabase, blobs); // new browser, same database
   await signIn(again, 'pat@example.org');
-  assert.deepEqual((await again.call('GET', '/api/profile')).body, { kind: 'email', email: 'pat@example.org', displayName: 'Pat Jones', jobTitle: 'Mentor', phone: '555-0100' });
+  assert.deepEqual((await again.call('GET', '/api/profile')).body, { kind: 'email', email: 'pat@example.org', displayName: 'Pat Jones', jobTitle: 'Mentor', phone: '555-0100', role: 'user', permissions: [] });
 });
 
 test('profile validation: name required, length limits', async () => {
@@ -81,8 +83,9 @@ test('profiles are not exposed through the generic data routes or the backup', a
 
 test('the activity log records who acted: profile name, email, or board password', async () => {
   const blobs = memoryBlobs();
-  const pat = makeClient(EMAIL_ENV, fakeSupabase, blobs);
-  const board = makeClient(EMAIL_ENV, fakeSupabase, blobs);
+  const env = { ...EMAIL_ENV, ADMIN_EMAILS: 'pat@example.org' }; // so Pat may create records
+  const pat = makeClient(env, fakeSupabase, blobs);
+  const board = makeClient(env, fakeSupabase, blobs);
   await signIn(pat, 'pat@example.org');
   await pat.call('POST', '/api/mentors', { name: 'First Mentor' }); // no name set yet: falls back to email
   await pat.call('PUT', '/api/profile', { displayName: 'Pat Jones' });

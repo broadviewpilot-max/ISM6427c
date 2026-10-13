@@ -13,6 +13,15 @@ export function createRepo(env, blobs) {
       await blobs.setJSON(key, await encryptJSON(env, value, key));
     },
     remove: (key) => blobs.delete(key),
+    // Newest first by key (keys embed an ISO timestamp); reads only what it returns.
+    async listRecent(prefix, n) {
+      const { blobs: entries } = await blobs.list({ prefix });
+      const keys = entries.map((e) => e.key).sort().reverse().slice(0, n);
+      return (await Promise.all(keys.map(read))).filter(Boolean);
+    },
+    async count(prefix) {
+      return (await blobs.list({ prefix })).blobs.length;
+    },
     async list(prefix) {
       const { blobs: entries } = await blobs.list({ prefix });
       const rows = await Promise.all(entries.map((e) => read(e.key)));

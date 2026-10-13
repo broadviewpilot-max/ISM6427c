@@ -120,3 +120,37 @@ export function download(filename, text, type = 'text/csv') {
 export function mount(el, ...kids) {
   el.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false));
 }
+
+// A strong, easy-to-read password (no look-alike characters).
+export function generatePassword(len = 16) {
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  return [...crypto.getRandomValues(new Uint32Array(len))].map((n) => abc[n % abc.length]).join('');
+}
+
+// A modal form. `submit(values)` runs on Save; if it throws, the message is shown
+// in the dialog and what was typed is kept. Resolves true once saved, false if cancelled.
+export function formDialog({ title, intro, fields, submitLabel = 'Save', submit }) {
+  return new Promise((resolve) => {
+    const err = h('div', { class: 'banner err', role: 'alert', hidden: true });
+    const go = h('button', { class: 'btn primary', type: 'submit' }, submitLabel);
+    const form = h('form', { autocomplete: 'off' }, intro && h('p', { class: 'muted small' }, intro),
+      fields.map((f) => {
+        const el = field(f);
+        if (f.generate) el.append(h('div', { class: 'actions', style: 'margin-top:.3rem' }, h('button', { class: 'btn sm', type: 'button', onclick: () => { el.querySelector('input').value = generatePassword(); } }, 'Generate a strong password')));
+        return el;
+      }),
+      err, h('div', { class: 'actions' }, go, h('button', { class: 'btn', type: 'button', onclick: () => dlg.close('cancel') }, 'Cancel')));
+    const dlg = h('dialog', {}, h('h2', {}, title), form);
+    let saved = false;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      err.hidden = true;
+      go.disabled = true;
+      try { await submit(readForm(form)); saved = true; dlg.close('ok'); } catch (ex) { err.textContent = ex.message || 'Something went wrong.'; err.hidden = false; go.disabled = false; }
+    });
+    dlg.addEventListener('close', () => { resolve(saved); dlg.remove(); });
+    document.body.append(dlg);
+    dlg.showModal();
+    form.querySelector('input,select')?.focus();
+  });
+}

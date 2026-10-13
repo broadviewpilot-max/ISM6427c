@@ -54,6 +54,35 @@ Email sessions last `EMAIL_SESSION_HOURS` (default 12, max 168). Removing a pers
 
 Each email account has its own profile (name, job title, phone; the email comes from the sign-in and can't be edited). It is created automatically at first sign-in and edited under **My profile**. Profiles are stored with the rest of the app's data, encrypted in Netlify Blobs, keyed by a one-way hash of the Supabase user id; people can only read and change their own. The dashboard greeting uses the profile name, and the activity log (Settings) shows who made each change: the profile name, the email if no name is set yet, or "board password" for the shared password. The shared board-password session has no profile and keeps its existing greeting. Profiles are not part of the JSON backup.
 
+## Roles and the Administration page
+
+Every email account has one role. Roles are enforced **on the server** for every request; the pages only hide what a person could not use anyway. A change of role, or deactivating someone, takes effect on their very next click.
+
+| Role | Can do |
+| --- | --- |
+| **Administrator** | Everything, plus the **Administration** page (people, roles, passwords, system status, activity). |
+| **Employee** | View, add and edit participants, mentors, sponsors/donors and reports. Cannot delete records, change settings, read the activity log or download backups. |
+| **User** | Sign in and edit their own profile. No access to Foundation records. This is the default for every new account. |
+| *Board password* | The shared sign-in keeps its original access to all records and settings. It cannot use the Administration page. |
+
+The permission table lives in one place, `netlify/lib/roles.mjs`, so changing what a role can do is a small, reviewable edit.
+
+### Making the first administrator
+
+Set **`ADMIN_EMAILS`** in Netlify (comma-separated emails) and redeploy. Those people are always administrators the moment they sign in with email, and cannot be demoted or removed from inside the app, so the Foundation can never lock itself out. Everyone else starts as **User**; an administrator promotes them on the Administration page. Nobody can change their own role. **Without `ADMIN_EMAILS`, no one can reach the Administration page.**
+
+### What the Administration page does
+
+- **Overview:** live checks of the database (writes, reads back and decrypts a test record), Supabase Auth and the admin key, with response times; a configuration checklist (set / not set, values never shown); sign-ins, failed sign-ins and changes in the last 24 hours; record counts; last backup.
+- **People & roles:** everyone who can sign in, their role and status; change roles; **deactivate/reactivate** (ends their access immediately and also bans them in Supabase); and, with the secret key below, **add people, set passwords and delete accounts**. An administrator cannot change, deactivate or delete themselves.
+- **Activity:** the 300 most recent events with who did them, filterable, downloadable as CSV. Every administrator action is logged. Passwords are never logged.
+
+### Turning on user management (optional)
+
+Adding people, setting passwords and deleting accounts call Supabase's admin API, which needs the project's **secret key**. Supabase → Project Settings → API Keys → *Secret keys* → copy it, then in Netlify add **`SUPABASE_SECRET_KEY`** and redeploy. (The legacy `service_role` key also works as `SUPABASE_SERVICE_ROLE_KEY`.) It is read only on the server, only by administrator-only routes, and is never returned to a browser or written to storage. Without it, the page still lists people who have signed in and lets administrators change roles and deactivate accounts.
+
+Passwords set by an administrator must be at least 10 characters. There is a "Generate a strong password" button.
+
 ## Free, keyless public APIs
 
 No account, key or payment. Both are optional conveniences that fail silently. Only a ZIP code or a year is ever sent, never a person's data.
