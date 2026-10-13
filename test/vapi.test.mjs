@@ -35,7 +35,7 @@ test('prompt never contains bank details and forbids reading them', () => {
 test('contact email is the dot-org Sean Smith address, never the old info@ or .com', () => {
   const a = buildAssistant({});
   const all = a.model.messages[0].content + a.voicemailMessage;
-  assert.match(a.model.messages[0].content, /sean\.smith@theaimsirfoundation\.org/);
-  assert.match(a.voicemailMessage, /sean dot smith at the Aimsir Foundation dot org/);
+  assert.match(a.model.messages[0].content, /seansmith@theaimsirfoundation\.org/);
+  assert.match(a.voicemailMessage, /seansmith, all one word, at the Aimsir Foundation dot org/);
   assert.ok(!/info (at|@)|\.com/.test(all));
 });
