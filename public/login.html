@@ -14,16 +14,34 @@
     <div class="login-card">
       <div class="login-logo"><img src="/logo.png" width="360" height="100" alt="The Aimsir Foundation"><p>Inspiring the skies, changing lives.</p></div>
       <h1>Welcome</h1>
-      <p class="muted">This operations tool holds confidential participant, mentor and donor information. Enter the board password to continue.</p>
-      <form id="form" autocomplete="off">
-        <div class="field">
-          <label for="pw">Board password</label>
-          <input id="pw" name="password" type="password" required autofocus autocomplete="current-password">
-        </div>
-        <div id="err" class="banner err" role="alert" hidden></div>
-        <button class="btn primary" id="go" type="submit">Sign in</button>
-      </form>
-      <p class="small muted" style="margin-top:1rem">Access is limited to Foundation board members. Activity is logged.</p>
+      <p class="muted">This operations tool holds confidential participant, mentor and donor information. Sign in to continue.</p>
+      <div id="boardView">
+        <form id="form" autocomplete="off">
+          <div class="field">
+            <label for="pw">Board password</label>
+            <input id="pw" name="password" type="password" required autofocus autocomplete="current-password">
+          </div>
+          <div id="err" class="banner err" role="alert" hidden></div>
+          <button class="btn primary" id="go" type="submit">Sign in</button>
+        </form>
+        <p class="small" style="margin-top:1rem"><button class="btn ghost sm" id="toEmail" type="button">Sign in with email instead</button></p>
+      </div>
+      <div id="emailView" hidden>
+        <form id="emailForm" autocomplete="on">
+          <div class="field">
+            <label for="em">Email address</label>
+            <input id="em" name="email" type="email" required autocomplete="username" autocapitalize="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="empw">Password</label>
+            <input id="empw" name="password" type="password" required autocomplete="current-password">
+          </div>
+          <div id="emailErr" class="banner err" role="alert" hidden></div>
+          <button class="btn primary" id="emailGo" type="submit">Sign in</button>
+        </form>
+        <p class="small" style="margin-top:1rem"><button class="btn ghost sm" id="toBoard" type="button">Use the board password instead</button></p>
+      </div>
+      <p class="small muted" style="margin-top:1rem">Access is limited to approved Foundation users. Activity is logged.</p>
     </div>
   </div>
   <script src="/login.js"></script>

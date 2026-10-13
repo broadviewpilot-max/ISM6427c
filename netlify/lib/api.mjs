@@ -1,4 +1,4 @@
-import { checkPassword, gateConfigured, isAuthed, makeToken, sessionCookie, sha256Hex } from './auth.mjs';
+import { checkPassword, emailAllowed, emailLoginConfigured, emailSessionSeconds, gateConfigured, isAuthed, makeToken, makeUserToken, sessionCookie, sha256Hex } from './auth.mjs';
 import { dataKeyConfigured, dataKeyProblem } from './crypto.mjs';
 import { createRepo } from './store.mjs';
 import { COLLECTIONS, DEFAULT_SETTINGS, ValidationError, sanitize, sanitizeSettings } from './schema.mjs';
@@ -14,7 +14,7 @@ const json = (data, status = 200, headers = {}) =>
   });
 const fail = (status, error) => json({ error }, status);
 
-export function createHandler({ env, blobs }) {
+export function createHandler({ env, blobs, fetchImpl = fetch }) {
   const repo = createRepo(env, blobs);
 
   const audit = (action, detail = '') =>
@@ -41,6 +41,50 @@ export function createHandler({ env, blobs }) {
     return json({ ok: true }, 200, { 'set-cookie': sessionCookie(env, await makeToken(env), secure) });
   }
 
+  // Email sign-in: Supabase checks the email and password; this server then
+  // issues the same kind of signed, HttpOnly cookie as the board password.
+  async function loginEmail(req, ctx) {
+    if (!emailLoginConfigured(env)) return fail(503, 'Email sign-in is not set up yet. Please use the board password.');
+    const ipHash = await sha256Hex(ctx?.ip || req.headers.get('x-nf-client-connection-ip') || 'unknown');
+    const key = `auth/${ipHash}`;
+    const state = (await repo.read(key)) || { count: 0, since: 0 };
+    const now = Date.now();
+    if (state.count >= MAX_ATTEMPTS && now - state.since < LOCKOUT_MS) {
+      return fail(429, 'Too many incorrect attempts. Please wait 15 minutes and try again.');
+    }
+    const body = await req.json().catch(() => ({}));
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (!email || email.length > 254 || !email.includes('@') || !password || password.length > 200) {
+      return fail(400, 'Enter your email address and password.');
+    }
+    const rejected = async () => {
+      const fresh = state.count >= MAX_ATTEMPTS && now - state.since >= LOCKOUT_MS;
+      await repo.write(key, { count: fresh ? 1 : state.count + 1, since: fresh || !state.count ? now : state.since });
+      await audit('login-email-failed');
+      return fail(401, 'That email or password is not correct.');
+    };
+    let res;
+    try {
+      res = await fetchImpl(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_PUBLISHABLE_KEY, 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch {
+      return fail(502, 'Could not reach the sign-in service. Please try again.');
+    }
+    if (res.status >= 500) return fail(502, 'The sign-in service is having trouble. Please try again.');
+    if (!res.ok) return rejected();
+    const user = (await res.json().catch(() => ({})))?.user;
+    if (!user?.id || !emailAllowed(env, user.email || email)) return rejected();
+    await repo.remove(key);
+    await audit('login-email', user.email || email);
+    const secure = new URL(req.url).protocol === 'https:';
+    return json({ ok: true }, 200, { 'set-cookie': sessionCookie(env, await makeUserToken(env, user.id), secure, emailSessionSeconds(env)) });
+  }
+
   return async function handle(req, ctx) {
     if (!gateConfigured(env) || !dataKeyConfigured(env)) {
       const problems = [];
@@ -63,6 +107,7 @@ export function createHandler({ env, blobs }) {
       }
 
       if (resource === 'login' && method === 'POST') return await login(req, ctx);
+      if (resource === 'login-email' && method === 'POST') return await loginEmail(req, ctx);
       if (resource === 'logout' && method === 'POST') {
         return json({ ok: true }, 200, { 'set-cookie': sessionCookie(env, '', new URL(req.url).protocol === 'https:') });
       }

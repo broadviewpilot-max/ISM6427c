@@ -57,9 +57,47 @@ export async function makeToken(env, now = Date.now()) {
 
 export async function verifyToken(env, token, now = Date.now()) {
   if (!gateConfigured(env) || typeof token !== 'string') return false;
+  if (token.startsWith('u.')) return verifyUserToken(env, token, now);
   const [exp, sig] = token.split('.');
   if (!/^\d+$/.test(exp || '') || !sig || Number(exp) < Math.floor(now / 1000)) return false;
   return safeEqual(sig, await sign(env, exp));
+}
+
+// ---- Email sign-in (Supabase Auth) -------------------------------------
+// Supabase only proves who the person is. Once it has, the server issues its
+// own signed cookie, so no Supabase token is ever kept or sent to the browser.
+export const DEFAULT_EMAIL_SESSION_HOURS = 12;
+
+export function emailLoginConfigured(env) {
+  return /^https:\/\/[^/\s]+$/.test(env.SUPABASE_URL || '') && !!env.SUPABASE_PUBLISHABLE_KEY;
+}
+
+export function emailSessionSeconds(env) {
+  const n = Number(env.EMAIL_SESSION_HOURS);
+  return Math.round((Number.isFinite(n) && n > 0 && n <= 168 ? n : DEFAULT_EMAIL_SESSION_HOURS) * 3600);
+}
+
+// Optional extra lock: when ALLOWED_EMAILS is set, only those addresses get in,
+// even if someone manages to create a Supabase account.
+export function emailAllowed(env, email) {
+  const list = String(env.ALLOWED_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return list.length === 0 || list.includes(String(email).toLowerCase());
+}
+
+async function signUser(env, exp, uid) {
+  return hmac(env.SESSION_SECRET, `u1.${exp}.${uid}`);
+}
+
+export async function makeUserToken(env, userId, now = Date.now()) {
+  const uid = (await sha256Hex(String(userId))).slice(0, 32);
+  const exp = Math.floor(now / 1000) + emailSessionSeconds(env);
+  return `u.${exp}.${uid}.${await signUser(env, exp, uid)}`;
+}
+
+async function verifyUserToken(env, token, now) {
+  const [, exp, uid, sig] = token.split('.');
+  if (!/^\d+$/.test(exp || '') || !/^[0-9a-f]{32}$/.test(uid || '') || !sig || Number(exp) < Math.floor(now / 1000)) return false;
+  return safeEqual(sig, await signUser(env, exp, uid));
 }
 
 export function parseCookies(header = '') {
@@ -73,7 +111,7 @@ export function parseCookies(header = '') {
 
 export const isAuthed = (env, req) => verifyToken(env, parseCookies(req.headers.get('cookie') || '')[COOKIE]);
 
-export function sessionCookie(env, token, secure) {
-  const age = token ? Math.round(sessionDays(env) * 86400) : 0;
+export function sessionCookie(env, token, secure, maxAgeSeconds) {
+  const age = token ? maxAgeSeconds ?? Math.round(sessionDays(env) * 86400) : 0;
   return `${COOKIE}=${token || ''}; Path=/; Max-Age=${age}; HttpOnly; SameSite=Strict${secure ? '; Secure' : ''}`;
 }

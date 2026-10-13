@@ -39,6 +39,17 @@ Netlify → **Site configuration → Environment variables** → edit `APP_PASSW
 - **Exports**: the summary CSV has no personal details. Detailed exports require a confirmation and are logged.
 - **Keep the key**: `DATA_ENCRYPTION_KEY` must never be changed or lost, or existing records cannot be read. Store a copy in the Foundation's password manager. Settings → Download backup gives a plain JSON copy; store it securely.
 
+## Authentication (email sign-in, optional)
+
+Invited people can sign in with their own email and password, alongside the shared board password. Supabase Auth checks the email and password; the server then issues the same kind of signed `HttpOnly` cookie, so no Supabase token is ever stored or sent to the browser. The board password keeps working exactly as before, and email sign-in stays off until the two variables below are set.
+
+1. In Supabase (project **Aimsir login**): **Authentication → Sign In / Providers → turn OFF "Allow new users to sign up"**. This is what keeps strangers out. Then add each person under **Authentication → Users → Add user → Create new user** (tick *Auto Confirm User*), and give them their initial password.
+2. In Netlify add `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` (Supabase → Project Settings → API Keys). The publishable key is designed to be public; never use a secret or `service_role` key here.
+3. Recommended extra lock: set `ALLOWED_EMAILS` (comma-separated). Only those addresses get in, even if an account were created by mistake.
+4. Redeploy. The sign-in page has a **Sign in with email instead** link.
+
+Email sessions last `EMAIL_SESSION_HOURS` (default 12, max 168). Removing a person in Supabase or from `ALLOWED_EMAILS` blocks new sign-ins immediately; a session already open ends when its cookie expires, so keep that short. Successful and failed email sign-ins are written to the activity log, and failed attempts share the 5-tries-then-15-minute lockout.
+
 ## Free, keyless public APIs
 
 No account, key or payment. Both are optional conveniences that fail silently. Only a ZIP code or a year is ever sent, never a person's data.
