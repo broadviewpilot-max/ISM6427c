@@ -8,7 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const API = 'https://api.vapi.ai';
 
 export function buildAssistant(env = process.env) {
-  const agentName = (env.AGENT_NAME || 'Marcus').trim();
+  const agentName = (env.AGENT_NAME || 'Walter').trim();
   const transfer = (env.TRANSFER_NUMBER || '').trim();
   if (transfer && !/^\+[1-9]\d{6,14}$/.test(transfer)) {
     throw new Error('TRANSFER_NUMBER must be E.164 format, e.g. +19545550123');
@@ -89,7 +89,7 @@ async function main() {
   const [cmd, id] = process.argv.slice(2);
   if (!['dry-run', 'create', 'update'].includes(cmd) || (cmd === 'update' && !id)) {
     console.log('Usage:\n  node vapi/assistant.mjs dry-run            print the payload, send nothing\n  node vapi/assistant.mjs create             create the assistant (needs VAPI_API_KEY)\n  node vapi/assistant.mjs update <id>        update an existing assistant');
-    console.log('\nEnv: VAPI_API_KEY, AGENT_NAME (default Marcus), TRANSFER_NUMBER (E.164, optional),\n     VAPI_MODEL, VAPI_VOICE_ID, SERVER_URL');
+    console.log('\nEnv: VAPI_API_KEY, AGENT_NAME (default Walter), TRANSFER_NUMBER (E.164, optional),\n     VAPI_MODEL, VAPI_VOICE_ID, SERVER_URL');
     process.exit(cmd ? 1 : 0);
   }
   const payload = buildAssistant();

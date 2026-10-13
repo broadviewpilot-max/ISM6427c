@@ -15,7 +15,7 @@ Use a **private** key from the Vapi dashboard. Never commit it. Then attach the 
 | Variable | Purpose |
 | --- | --- |
 | `VAPI_API_KEY` | Required for `create` / `update` |
-| `AGENT_NAME` | Persona name (default `Marcus`, a placeholder) |
+| `AGENT_NAME` | Persona name (default `Walter`) |
 | `TRANSFER_NUMBER` | E.164 staff number. Without it there is no transfer tool and the agent takes a message |
 | `VAPI_MODEL` | Default `claude-sonnet-4-6` (valid in Vapi's API reference; `claude-sonnet-5` also listed) |
 | `VAPI_VOICE_ID` | Default Vapi built-in `Elliot`. Audition others in the dashboard |
@@ -27,7 +27,7 @@ Use a **private** key from the Vapi dashboard. Never commit it. Then attach the 
 
 ## Review before going live
 
-- Persona name, and whether the agent should state that it is an AI (it currently does when asked and in the greeting).
+- Persona name (Walter), and whether the agent should state that it is an AI (it currently does when asked and in the greeting).
 - Transfer number and who answers it.
 - The `info@` address appears as both `.org` and `.com` in Foundation posts. The prompt uses `.org`; confirm.
 - The public donate page prints bank account and routing numbers. The agent never reads these and never takes payment details.
