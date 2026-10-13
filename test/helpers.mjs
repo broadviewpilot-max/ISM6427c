@@ -17,9 +17,8 @@ export function memoryBlobs() {
   };
 }
 
-export function makeClient(env = ENV) {
-  const blobs = memoryBlobs();
-  const handle = createHandler({ env, blobs });
+export function makeClient(env = ENV, fetchImpl, blobs = memoryBlobs()) {
+  const handle = createHandler({ env, blobs, fetchImpl });
   let cookie = '';
   const call = async (method, path, body, extra = {}) => {
     const headers = { 'x-requested-with': 'aimsir', 'content-type': 'application/json', ...extra };

@@ -163,3 +163,4 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   .card, .stat { box-shadow: none; break-inside: avoid; }
   :root[data-theme="dark"] { --bg: #fff; --surface: #fff; --surface-2: #eee; --text: #000; --muted: #444; --border: #bbb; --primary: #00778b; }
 }
+[hidden] { display: none !important; }

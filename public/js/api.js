@@ -35,6 +35,11 @@ export const api = {
     return cache.settings;
   },
   async saveSettings(s) { cache.settings = await request('PUT', 'settings', s); return cache.settings; },
+  async profile(force) {
+    if (force || !cache.profile) cache.profile = await request('GET', 'profile');
+    return cache.profile;
+  },
+  async saveProfile(p) { cache.profile = await request('PUT', 'profile', p); return cache.profile; },
   logExport: (detail) => request('POST', 'audit', { action: 'export', detail }).catch(() => {}),
   logout: () => request('POST', 'logout', {}).catch(() => {}),
 };

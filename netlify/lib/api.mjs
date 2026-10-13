@@ -1,7 +1,7 @@
-import { checkPassword, gateConfigured, isAuthed, makeToken, sessionCookie, sha256Hex } from './auth.mjs';
+import { checkPassword, emailAllowed, emailLoginConfigured, emailSessionSeconds, gateConfigured, isAuthed, makeToken, makeUserToken, sessionCookie, sha256Hex, userIdFromRequest, userKey } from './auth.mjs';
 import { dataKeyConfigured, dataKeyProblem } from './crypto.mjs';
 import { createRepo } from './store.mjs';
-import { COLLECTIONS, DEFAULT_SETTINGS, ValidationError, sanitize, sanitizeSettings } from './schema.mjs';
+import { COLLECTIONS, DEFAULT_SETTINGS, ValidationError, sanitize, sanitizeProfile, sanitizeSettings } from './schema.mjs';
 
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_MS = 15 * 60 * 1000;
@@ -14,11 +14,20 @@ const json = (data, status = 200, headers = {}) =>
   });
 const fail = (status, error) => json({ error }, status);
 
-export function createHandler({ env, blobs }) {
+export function createHandler({ env, blobs, fetchImpl = fetch }) {
   const repo = createRepo(env, blobs);
 
-  const audit = (action, detail = '') =>
-    repo.write(`audit/${new Date().toISOString()}-${crypto.randomUUID().slice(0, 8)}`, { at: new Date().toISOString(), action, detail: String(detail).slice(0, 200) });
+  const audit = (action, detail = '', by = '') =>
+    repo.write(`audit/${new Date().toISOString()}-${crypto.randomUUID().slice(0, 8)}`, { at: new Date().toISOString(), action, detail: String(detail).slice(0, 200), ...(by && { by: String(by).slice(0, 100) }) });
+
+  // Creates the person's profile on first email sign-in and keeps the email current.
+  async function ensureProfile(userId, email) {
+    const key = `profiles/${await userKey(userId)}`;
+    const now = new Date().toISOString();
+    const existing = await repo.read(key);
+    if (!existing) await repo.write(key, { email, displayName: '', jobTitle: '', phone: '', createdAt: now, updatedAt: now });
+    else if (existing.email !== email) await repo.write(key, { ...existing, email, updatedAt: now });
+  }
 
   async function login(req, ctx) {
     const ipHash = await sha256Hex(ctx?.ip || req.headers.get('x-nf-client-connection-ip') || 'unknown');
@@ -39,6 +48,51 @@ export function createHandler({ env, blobs }) {
     await audit('login');
     const secure = new URL(req.url).protocol === 'https:';
     return json({ ok: true }, 200, { 'set-cookie': sessionCookie(env, await makeToken(env), secure) });
+  }
+
+  // Email sign-in: Supabase checks the email and password; this server then
+  // issues the same kind of signed, HttpOnly cookie as the board password.
+  async function loginEmail(req, ctx) {
+    if (!emailLoginConfigured(env)) return fail(503, 'Email sign-in is not set up yet. Please use the board password.');
+    const ipHash = await sha256Hex(ctx?.ip || req.headers.get('x-nf-client-connection-ip') || 'unknown');
+    const key = `auth/${ipHash}`;
+    const state = (await repo.read(key)) || { count: 0, since: 0 };
+    const now = Date.now();
+    if (state.count >= MAX_ATTEMPTS && now - state.since < LOCKOUT_MS) {
+      return fail(429, 'Too many incorrect attempts. Please wait 15 minutes and try again.');
+    }
+    const body = await req.json().catch(() => ({}));
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (!email || email.length > 254 || !email.includes('@') || !password || password.length > 200) {
+      return fail(400, 'Enter your email address and password.');
+    }
+    const rejected = async () => {
+      const fresh = state.count >= MAX_ATTEMPTS && now - state.since >= LOCKOUT_MS;
+      await repo.write(key, { count: fresh ? 1 : state.count + 1, since: fresh || !state.count ? now : state.since });
+      await audit('login-email-failed');
+      return fail(401, 'That email or password is not correct.');
+    };
+    let res;
+    try {
+      res = await fetchImpl(`${env.SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { apikey: env.SUPABASE_PUBLISHABLE_KEY, 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch {
+      return fail(502, 'Could not reach the sign-in service. Please try again.');
+    }
+    if (res.status >= 500) return fail(502, 'The sign-in service is having trouble. Please try again.');
+    if (!res.ok) return rejected();
+    const user = (await res.json().catch(() => ({})))?.user;
+    if (!user?.id || !emailAllowed(env, user.email || email)) return rejected();
+    await repo.remove(key);
+    await ensureProfile(user.id, (user.email || email).toLowerCase());
+    await audit('login-email', user.email || email);
+    const secure = new URL(req.url).protocol === 'https:';
+    return json({ ok: true }, 200, { 'set-cookie': sessionCookie(env, await makeUserToken(env, user.id), secure, emailSessionSeconds(env)) });
   }
 
   return async function handle(req, ctx) {
@@ -63,18 +117,43 @@ export function createHandler({ env, blobs }) {
       }
 
       if (resource === 'login' && method === 'POST') return await login(req, ctx);
+      if (resource === 'login-email' && method === 'POST') return await loginEmail(req, ctx);
       if (resource === 'logout' && method === 'POST') {
         return json({ ok: true }, 200, { 'set-cookie': sessionCookie(env, '', new URL(req.url).protocol === 'https:') });
       }
       if (!(await isAuthed(env, req))) return fail(401, 'Please sign in.');
       if (resource === 'session') return json({ ok: true });
 
+      // Who is acting: an email user (profile name or email) or the shared board password.
+      const uid = await userIdFromRequest(env, req);
+      let actor;
+      const by = async () => {
+        if (actor === undefined) {
+          const p = uid ? await repo.read(`profiles/${uid}`) : null;
+          actor = uid ? p?.displayName || p?.email || 'email user' : 'board password';
+        }
+        return actor;
+      };
+
+      if (resource === 'profile') {
+        if (!uid) return method === 'GET' ? json({ kind: 'board' }) : fail(403, 'Profiles belong to email accounts. You are signed in with the shared board password.');
+        const key = `profiles/${uid}`;
+        const mine = (await repo.read(key)) || {};
+        if (method === 'GET') return json({ kind: 'email', email: mine.email || '', displayName: mine.displayName || '', jobTitle: mine.jobTitle || '', phone: mine.phone || '' });
+        if (method === 'PUT') {
+          const rec = { ...mine, ...sanitizeProfile(await req.json().catch(() => null)), updatedAt: new Date().toISOString() };
+          await repo.write(key, rec);
+          await audit('profile-updated', '', rec.displayName);
+          return json({ kind: 'email', email: rec.email || '', displayName: rec.displayName, jobTitle: rec.jobTitle, phone: rec.phone });
+        }
+      }
+
       if (resource === 'settings') {
         if (method === 'GET') return json((await repo.read('settings/main')) || DEFAULT_SETTINGS);
         if (method === 'PUT') {
           const s = sanitizeSettings(await req.json().catch(() => null));
           await repo.write('settings/main', s);
-          await audit('settings-updated');
+          await audit('settings-updated', '', await by());
           return json(s);
         }
       }
@@ -86,13 +165,13 @@ export function createHandler({ env, blobs }) {
         }
         if (method === 'POST') {
           const b = await req.json().catch(() => ({}));
-          await audit(String(b.action || 'event').slice(0, 40), b.detail);
+          await audit(String(b.action || 'event').slice(0, 40), b.detail, await by());
           return json({ ok: true });
         }
       }
 
       if (resource === 'backup' && method === 'GET') {
-        await audit('backup-downloaded');
+        await audit('backup-downloaded', '', await by());
         const data = { exportedAt: new Date().toISOString(), settings: (await repo.read('settings/main')) || DEFAULT_SETTINGS };
         for (const c of COLLECTIONS) data[c] = await repo.list(`${c}/`);
         return json(data);
@@ -104,7 +183,7 @@ export function createHandler({ env, blobs }) {
           const now = new Date().toISOString();
           const rec = { ...sanitize(resource, await req.json().catch(() => null)), id: crypto.randomUUID(), createdAt: now, updatedAt: now };
           await repo.write(`${resource}/${rec.id}`, rec);
-          await audit('created', `${resource}/${rec.id}`);
+          await audit('created', `${resource}/${rec.id}`, await by());
           return json(rec, 201);
         }
         if (id && !ID_RE.test(id)) return fail(400, 'Invalid id');
@@ -120,7 +199,7 @@ export function createHandler({ env, blobs }) {
           if (body?.updatedAt !== existing.updatedAt) return fail(409, 'This record was changed by someone else. Reload it and try again.');
           const rec = { ...sanitize(resource, body), id, createdAt: existing.createdAt, updatedAt: new Date().toISOString() };
           await repo.write(key, rec);
-          await audit('updated', key);
+          await audit('updated', key, await by());
           return json(rec);
         }
         if (id && method === 'DELETE') {
@@ -131,7 +210,7 @@ export function createHandler({ env, blobs }) {
               if (p.mentorId === id) await repo.write(`participants/${p.id}`, { ...p, mentorId: '', updatedAt: new Date().toISOString() });
             }
           }
-          await audit('deleted', key);
+          await audit('deleted', key, await by());
           return json({ ok: true });
         }
       }

@@ -9,6 +9,8 @@ import * as reports from './reports.js';
 // Greeting shown on the dashboard.
 const USER = { name: 'Sean Smith', first: 'Sean', title: 'Executive Director' };
 const IDLE_MS = 30 * 60 * 1000;
+// Who is signed in: { kind: 'board' } for the shared password, or an email user's profile.
+let ME = { kind: 'board' };
 
 const NAV = [
   ['#/', 'Dashboard'],
@@ -32,6 +34,16 @@ function greeting() {
   return hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
 }
 
+const needsName = () => ME.kind === 'email' && !ME.displayName;
+function heroText() {
+  if (ME.kind !== 'email') {
+    return [h('h1', {}, `${greeting()}, ${USER.first}.`), h('p', {}, `Welcome back, ${USER.name}, ${USER.title} of The Aimsir Foundation. Inspiring the skies, changing lives.`)];
+  }
+  const first = (ME.displayName || '').split(/\s+/)[0];
+  return [h('h1', {}, first ? `${greeting()}, ${first}.` : `${greeting()}.`),
+    h('p', {}, `${ME.displayName ? 'Welcome back' : 'Welcome'}${ME.jobTitle ? `, ${ME.jobTitle}` : ''}. The Aimsir Foundation: inspiring the skies, changing lives.`)];
+}
+
 function stat(n, l) { return h('div', { class: 'stat' }, h('div', { class: 'n' }, n), h('div', { class: 'l' }, l)); }
 
 async function dashboard(root) {
@@ -49,9 +61,8 @@ async function dashboard(root) {
   for (const p of noConsent) attention.push(h('li', {}, h('a', { href: '#/participants/' + p.id }, fullName(p)), ' · minor, guardian consent not marked on file'));
 
   mount(root, 
-    h('section', { class: 'hero' },
-      h('h1', {}, `${greeting()}, ${USER.first}.`),
-      h('p', {}, `Welcome back, ${USER.name}, ${USER.title} of The Aimsir Foundation. Inspiring the skies, changing lives.`)),
+    h('section', { class: 'hero' }, ...heroText()),
+    needsName() && h('div', { class: 'banner' }, 'Welcome! Please add your name on ', h('a', { href: '#/profile' }, 'My profile'), ' so teammates can see who made each change.'),
     empty && h('div', { class: 'card accent' }, h('h2', {}, 'Getting started'),
       h('p', {}, 'No records have been entered yet. Begin with the module you use most.'),
       h('div', { class: 'actions' },
@@ -70,6 +81,27 @@ function planned(name, points) {
     h('div', { class: 'card accent' }, h('h2', {}, 'Coming in a later phase'),
       h('p', {}, `${name} is not available yet. This page reserves its place in the navigation so it can be added without changing how the rest of the tool works.`),
       h('p', { class: 'muted small' }, points)));
+}
+
+async function profile(root) {
+  if (ME.kind !== 'email') {
+    return mount(root, pageHead('My profile'), h('div', { class: 'card accent' }, h('h2', {}, 'Signed in with the shared password'),
+      h('p', {}, 'Profiles belong to individual email accounts. Sign out and use “Sign in with email” to have your own profile.')));
+  }
+  const me = await api.profile(true);
+  const form = h('form', { class: 'card' }, h('h2', {}, 'Your details'),
+    h('div', { class: 'grid' },
+      field({ label: 'Name', name: 'displayName', value: me.displayName, required: true, hint: 'Shown in the activity log next to changes you make.' }),
+      field({ label: 'Job title or role', name: 'jobTitle', value: me.jobTitle }),
+      field({ label: 'Phone', name: 'phone', value: me.phone }),
+      field({ label: 'Email (from your sign-in)', name: 'email', value: me.email, readonly: true, hint: 'To change your email, ask an administrator.' })),
+    h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'submit' }, 'Save profile')));
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const { displayName, jobTitle, phone } = readForm(form);
+    try { ME = await api.saveProfile({ displayName, jobTitle, phone }); paintMe(); toast('Profile saved'); } catch (err) { toast(err.message, true); }
+  });
+  mount(root, pageHead('My profile'), form);
 }
 
 async function settings(root) {
@@ -92,9 +124,9 @@ async function settings(root) {
   const logBox = h('div', {}, h('div', { class: 'empty' }, 'Loading…'));
   api.request('GET', 'audit').then((rows) => logBox.replaceChildren(table([
     { label: 'When', render: (r) => new Date(r.at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) },
-    { label: 'Action', render: (r) => r.action }, { label: 'Detail', render: (r) => r.detail || '—' }], rows, { empty: 'No activity yet.' }))).catch(() => logBox.replaceChildren('Could not load the activity log.'));
+    { label: 'Action', render: (r) => r.action }, { label: 'By', render: (r) => r.by || '—' }, { label: 'Detail', render: (r) => r.detail || '—' }], rows, { empty: 'No activity yet.' }))).catch(() => logBox.replaceChildren('Could not load the activity log.'));
   mount(root, pageHead('Settings'), form, backup,
-    h('section', { class: 'card' }, h('h2', {}, 'Recent activity'), h('p', { class: 'muted small' }, 'Sign-ins, changes and exports. Records are identified by ID only, never by name.'), logBox),
+    h('section', { class: 'card' }, h('h2', {}, 'Recent activity'), h('p', { class: 'muted small' }, 'Sign-ins, changes and exports. Records are identified by ID only, never by name. “By” shows who acted, when known.'), logBox),
     h('section', { class: 'card' }, h('h2', {}, 'Changing the shared password'),
       h('p', {}, 'In Netlify, open Site configuration → Environment variables, change APP_PASSWORD, then trigger a redeploy (Deploys → Trigger deploy). Everyone is signed out and must use the new password. No code changes are needed.')));
 }
@@ -108,6 +140,7 @@ const ROUTES = {
   grants: planned('Grant Tracking', 'Intended to track funders, applications, deadlines, awards and reporting obligations.'),
   events: planned('Event Management', 'Intended to manage Foundation events, registrations and volunteers.'),
   settings,
+  profile,
 };
 
 async function route() {
@@ -139,6 +172,12 @@ themeBtn.addEventListener('click', () => {
 });
 paintTheme();
 
+const meEl = document.getElementById('me');
+function paintMe() {
+  meEl.hidden = ME.kind !== 'email';
+  meEl.textContent = ME.displayName || ME.email || 'My profile';
+}
+
 async function signOut() { await api.logout(); location.replace('/login.html'); }
 document.getElementById('signout').addEventListener('click', signOut);
 
@@ -149,4 +188,4 @@ const resetIdle = () => { clearTimeout(idle); idle = setTimeout(signOut, IDLE_MS
 resetIdle();
 
 addEventListener('hashchange', route);
-route();
+api.profile(true).then((p) => { ME = p; paintMe(); }).catch(() => {}).finally(route);

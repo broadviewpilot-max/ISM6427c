@@ -10,6 +10,10 @@ const env = {
   APP_PASSWORD: process.env.APP_PASSWORD || 'local-dev-password',
   SESSION_SECRET: process.env.SESSION_SECRET || 'local-dev-secret-local-dev-secret-0000',
   DATA_ENCRYPTION_KEY: process.env.DATA_ENCRYPTION_KEY || Buffer.alloc(32, 1).toString('base64'),
+  SUPABASE_URL: process.env.SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
+  ALLOWED_EMAILS: process.env.ALLOWED_EMAILS,
+  EMAIL_SESSION_HOURS: process.env.EMAIL_SESSION_HOURS,
 };
 const root = path.resolve('public');
 const dataDir = path.resolve('.data');

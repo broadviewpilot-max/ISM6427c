@@ -68,7 +68,7 @@ export function field(f) {
     input = h('input', { id, name: f.name, type: 'checkbox', checked: !!f.value });
     return h('div', { class: 'field check' + (f.wide ? ' wide' : '') }, input, h('label', { for: id }, f.label), f.hint && h('span', { class: 'hint' }, f.hint));
   } else {
-    input = h('input', { id, name: f.name, type: f.type || 'text', value: f.value ?? '', required: f.required, maxlength: f.max || 200, step: f.type === 'number' ? '0.01' : null, min: f.type === 'number' ? '0' : null, autocomplete: 'off', inputmode: f.inputmode, placeholder: f.placeholder });
+    input = h('input', { id, name: f.name, type: f.type || 'text', value: f.value ?? '', required: f.required, maxlength: f.max || 200, step: f.type === 'number' ? '0.01' : null, min: f.type === 'number' ? '0' : null, autocomplete: 'off', inputmode: f.inputmode, placeholder: f.placeholder, readonly: f.readonly });
   }
   return h('div', { class: 'field' + (f.wide ? ' wide' : '') }, h('label', { for: id }, f.label + (f.required ? ' *' : '')), input, f.hint && h('span', { class: 'hint', id: id + '-hint' }, f.hint));
 }

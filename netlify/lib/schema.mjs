@@ -136,3 +136,14 @@ export function sanitizeSettings(body) {
   if (!list.length || list.length > 20 || list.some((s) => s.length > 80)) throw new ValidationError('Provide between 1 and 20 stage names (80 characters max each)');
   return { stages: [...new Set(list)] };
 }
+
+// A person's own profile. Email comes from the sign-in, never from the form.
+export const PROFILE_FIELDS = { displayName: str(80), jobTitle: str(80), phone: str(40) };
+
+export function sanitizeProfile(body) {
+  if (!body || typeof body !== 'object') throw new ValidationError('Invalid request body');
+  const out = {};
+  for (const [k, def] of Object.entries(PROFILE_FIELDS)) out[k] = clean(def, body[k], k);
+  if (!out.displayName) throw new ValidationError('Please enter your name');
+  return out;
+}
