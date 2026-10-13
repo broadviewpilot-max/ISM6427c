@@ -31,3 +31,11 @@ test('prompt never contains bank details and forbids reading them', () => {
   assert.ok(!/\b9334910057\b|\b063107513\b|\b121000248\b/.test(sys));
   assert.match(sys, /Never read out bank account numbers/);
 });
+
+test('contact email is the dot-org Sean Smith address, never the old info@ or .com', () => {
+  const a = buildAssistant({});
+  const all = a.model.messages[0].content + a.voicemailMessage;
+  assert.match(a.model.messages[0].content, /sean\.smith@theaimsirfoundation\.org/);
+  assert.match(a.voicemailMessage, /sean dot smith at the Aimsir Foundation dot org/);
+  assert.ok(!/info (at|@)|\.com/.test(all));
+});

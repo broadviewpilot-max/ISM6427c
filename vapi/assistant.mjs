@@ -50,7 +50,7 @@ export function buildAssistant(env = process.env) {
     silenceTimeoutSeconds: 30,
     endCallMessage: 'Thank you for calling The Aimsir Foundation. Inspiring the skies, changing lives. Goodbye.',
     endCallPhrases: ['goodbye', 'have a great day'],
-    voicemailMessage: 'Hello, this is The Aimsir Foundation returning your call. Please call us back at 844, 8 A I M S I R, or email info at the Aimsir Foundation dot org. Inspiring the skies, changing lives.',
+    voicemailMessage: 'Hello, this is The Aimsir Foundation returning your call. Please call us back at 844, 8 A I M S I R, or email sean dot smith at the Aimsir Foundation dot org. Inspiring the skies, changing lives.',
     analysisPlan: {
       summaryPlan: { enabled: true },
       structuredDataPlan: {
