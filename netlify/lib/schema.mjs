@@ -1,4 +1,6 @@
 // Server-side validation: only whitelisted fields are ever stored.
+import { ROLES } from './roles.mjs';
+
 export const COLLECTIONS = ['participants', 'mentors', 'sponsors'];
 
 export const ENUMS = {
@@ -145,5 +147,38 @@ export function sanitizeProfile(body) {
   const out = {};
   for (const [k, def] of Object.entries(PROFILE_FIELDS)) out[k] = clean(def, body[k], k);
   if (!out.displayName) throw new ValidationError('Please enter your name');
+  return out;
+}
+
+// ---- Administration input ----
+const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/;
+
+export function validatePassword(p) {
+  if (typeof p !== 'string' || p.length < 10) throw new ValidationError('The password must be at least 10 characters');
+  if (p.length > 72) throw new ValidationError('The password must be 72 characters or fewer');
+  return p;
+}
+
+export function sanitizeNewUser(body) {
+  if (!body || typeof body !== 'object') throw new ValidationError('Invalid request body');
+  const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+  if (!EMAIL_RE.test(email) || email.length > 254) throw new ValidationError('Enter a valid email address');
+  const role = body.role == null || body.role === '' ? 'user' : body.role;
+  if (!ROLES.includes(role)) throw new ValidationError('Choose a valid role');
+  return { email, role, password: validatePassword(body.password), displayName: clean(PROFILE_FIELDS.displayName, body.displayName, 'name') };
+}
+
+export function sanitizeUserUpdate(body) {
+  if (!body || typeof body !== 'object') throw new ValidationError('Invalid request body');
+  const out = {};
+  if (body.role !== undefined) {
+    if (!ROLES.includes(body.role)) throw new ValidationError('Choose a valid role');
+    out.role = body.role;
+  }
+  if (body.disabled !== undefined) {
+    if (typeof body.disabled !== 'boolean') throw new ValidationError('Invalid status');
+    out.disabled = body.disabled;
+  }
+  if (!Object.keys(out).length) throw new ValidationError('Nothing to change');
   return out;
 }

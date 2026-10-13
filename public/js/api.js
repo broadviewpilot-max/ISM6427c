@@ -12,6 +12,11 @@ async function request(method, path, body) {
   return data;
 }
 
+// Who is signed in and what they may do. Filled from /api/profile at start-up; the
+// server enforces every permission, this only decides what to show.
+export const session = { me: { kind: 'board', role: 'board', permissions: [] } };
+export const can = (perm) => !!session.me.permissions?.includes(perm);
+
 const cache = {};
 export const api = {
   request,
@@ -37,9 +42,10 @@ export const api = {
   async saveSettings(s) { cache.settings = await request('PUT', 'settings', s); return cache.settings; },
   async profile(force) {
     if (force || !cache.profile) cache.profile = await request('GET', 'profile');
+    session.me = cache.profile;
     return cache.profile;
   },
-  async saveProfile(p) { cache.profile = await request('PUT', 'profile', p); return cache.profile; },
+  async saveProfile(p) { cache.profile = await request('PUT', 'profile', p); session.me = cache.profile; return cache.profile; },
   logExport: (detail) => request('POST', 'audit', { action: 'export', detail }).catch(() => {}),
   logout: () => request('POST', 'logout', {}).catch(() => {}),
 };

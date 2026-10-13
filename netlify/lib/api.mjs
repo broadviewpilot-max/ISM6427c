@@ -1,6 +1,8 @@
 import { checkPassword, emailAllowed, emailLoginConfigured, emailSessionSeconds, gateConfigured, isAuthed, makeToken, makeUserToken, sessionCookie, sha256Hex, userIdFromRequest, userKey } from './auth.mjs';
 import { dataKeyConfigured, dataKeyProblem } from './crypto.mjs';
 import { createRepo } from './store.mjs';
+import { createAdmin } from './admin.mjs';
+import { adminEmails, can, effectiveRole, permissionsFor } from './roles.mjs';
 import { COLLECTIONS, DEFAULT_SETTINGS, ValidationError, sanitize, sanitizeProfile, sanitizeSettings } from './schema.mjs';
 
 const MAX_ATTEMPTS = 5;
@@ -20,14 +22,19 @@ export function createHandler({ env, blobs, fetchImpl = fetch }) {
   const audit = (action, detail = '', by = '') =>
     repo.write(`audit/${new Date().toISOString()}-${crypto.randomUUID().slice(0, 8)}`, { at: new Date().toISOString(), action, detail: String(detail).slice(0, 200), ...(by && { by: String(by).slice(0, 100) }) });
 
-  // Creates the person's profile on first email sign-in and keeps the email current.
+  // Creates the person's profile on first email sign-in; keeps email, Supabase id and last sign-in current.
   async function ensureProfile(userId, email) {
     const key = `profiles/${await userKey(userId)}`;
     const now = new Date().toISOString();
     const existing = await repo.read(key);
-    if (!existing) await repo.write(key, { email, displayName: '', jobTitle: '', phone: '', createdAt: now, updatedAt: now });
-    else if (existing.email !== email) await repo.write(key, { ...existing, email, updatedAt: now });
+    const rec = existing
+      ? { ...existing, email, supabaseId: userId, lastLoginAt: now }
+      : { email, supabaseId: userId, role: adminEmails(env).includes(email) ? 'administrator' : 'user', displayName: '', jobTitle: '', phone: '', createdAt: now, updatedAt: now, lastLoginAt: now };
+    await repo.write(key, rec);
+    return rec;
   }
+
+  const admin = createAdmin({ env, repo, fetchImpl, audit, json, fail });
 
   async function login(req, ctx) {
     const ipHash = await sha256Hex(ctx?.ip || req.headers.get('x-nf-client-connection-ip') || 'unknown');
@@ -88,6 +95,8 @@ export function createHandler({ env, blobs, fetchImpl = fetch }) {
     if (!res.ok) return rejected();
     const user = (await res.json().catch(() => ({})))?.user;
     if (!user?.id || !emailAllowed(env, user.email || email)) return rejected();
+    const prior = await repo.read(`profiles/${await userKey(user.id)}`);
+    if (prior?.disabled) return fail(403, 'This account has been deactivated. Please contact an administrator.');
     await repo.remove(key);
     await ensureProfile(user.id, (user.email || email).toLowerCase());
     await audit('login-email', user.email || email);
@@ -122,35 +131,45 @@ export function createHandler({ env, blobs, fetchImpl = fetch }) {
         return json({ ok: true }, 200, { 'set-cookie': sessionCookie(env, '', new URL(req.url).protocol === 'https:') });
       }
       if (!(await isAuthed(env, req))) return fail(401, 'Please sign in.');
+      // Who is acting: the shared board password, or an email account (which must still exist and be active).
+      const uid = await userIdFromRequest(env, req);
+      let me = { kind: 'board', role: 'board' };
+      if (uid) {
+        const profile = await repo.read(`profiles/${uid}`);
+        if (!profile || profile.disabled) return fail(401, 'This account is not active. Please contact an administrator.');
+        me = { kind: 'email', role: effectiveRole(env, profile), profile };
+      }
+      const need = (perm) => (can(me.role, perm) ? null : fail(403, 'You do not have permission to do that.'));
+      const by = async () => (me.kind === 'email' ? me.profile.displayName || me.profile.email || 'email user' : 'board password');
+      const view = () => (me.kind === 'email'
+        ? { kind: 'email', email: me.profile.email || '', displayName: me.profile.displayName || '', jobTitle: me.profile.jobTitle || '', phone: me.profile.phone || '', role: me.role, permissions: permissionsFor(me.role) }
+        : { kind: 'board', role: 'board', permissions: permissionsFor('board') });
+
       if (resource === 'session') return json({ ok: true });
 
-      // Who is acting: an email user (profile name or email) or the shared board password.
-      const uid = await userIdFromRequest(env, req);
-      let actor;
-      const by = async () => {
-        if (actor === undefined) {
-          const p = uid ? await repo.read(`profiles/${uid}`) : null;
-          actor = uid ? p?.displayName || p?.email || 'email user' : 'board password';
-        }
-        return actor;
-      };
-
       if (resource === 'profile') {
-        if (!uid) return method === 'GET' ? json({ kind: 'board' }) : fail(403, 'Profiles belong to email accounts. You are signed in with the shared board password.');
-        const key = `profiles/${uid}`;
-        const mine = (await repo.read(key)) || {};
-        if (method === 'GET') return json({ kind: 'email', email: mine.email || '', displayName: mine.displayName || '', jobTitle: mine.jobTitle || '', phone: mine.phone || '' });
+        if (me.kind !== 'email') return method === 'GET' ? json(view()) : fail(403, 'Profiles belong to email accounts. You are signed in with the shared board password.');
+        if (method === 'GET') return json(view());
         if (method === 'PUT') {
-          const rec = { ...mine, ...sanitizeProfile(await req.json().catch(() => null)), updatedAt: new Date().toISOString() };
-          await repo.write(key, rec);
+          const rec = { ...me.profile, ...sanitizeProfile(await req.json().catch(() => null)), updatedAt: new Date().toISOString() };
+          await repo.write(`profiles/${uid}`, rec);
           await audit('profile-updated', '', rec.displayName);
-          return json({ kind: 'email', email: rec.email || '', displayName: rec.displayName, jobTitle: rec.jobTitle, phone: rec.phone });
+          me = { ...me, profile: rec };
+          return json(view());
         }
       }
 
+      if (resource === 'admin') {
+        const denied = need('admin');
+        if (denied) return denied;
+        return await admin(req, { me, parts: parts.slice(1), method, by });
+      }
+
       if (resource === 'settings') {
-        if (method === 'GET') return json((await repo.read('settings/main')) || DEFAULT_SETTINGS);
+        if (method === 'GET') return need('data:read') || json((await repo.read('settings/main')) || DEFAULT_SETTINGS);
         if (method === 'PUT') {
+          const denied = need('settings:write');
+          if (denied) return denied;
           const s = sanitizeSettings(await req.json().catch(() => null));
           await repo.write('settings/main', s);
           await audit('settings-updated', '', await by());
@@ -160,10 +179,14 @@ export function createHandler({ env, blobs, fetchImpl = fetch }) {
 
       if (resource === 'audit') {
         if (method === 'GET') {
-          const rows = (await repo.list('audit/')).sort((a, b) => b.at.localeCompare(a.at)).slice(0, 100);
-          return json(rows);
+          const denied = need('audit:read');
+          if (denied) return denied;
+          const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 100, 1), 500);
+          return json((await repo.listRecent('audit/', limit)).sort((a, b) => b.at.localeCompare(a.at)));
         }
         if (method === 'POST') {
+          const denied = need('data:read');
+          if (denied) return denied;
           const b = await req.json().catch(() => ({}));
           await audit(String(b.action || 'event').slice(0, 40), b.detail, await by());
           return json({ ok: true });
@@ -171,6 +194,8 @@ export function createHandler({ env, blobs, fetchImpl = fetch }) {
       }
 
       if (resource === 'backup' && method === 'GET') {
+        const denied = need('backup');
+        if (denied) return denied;
         await audit('backup-downloaded', '', await by());
         const data = { exportedAt: new Date().toISOString(), settings: (await repo.read('settings/main')) || DEFAULT_SETTINGS };
         for (const c of COLLECTIONS) data[c] = await repo.list(`${c}/`);
@@ -178,6 +203,8 @@ export function createHandler({ env, blobs, fetchImpl = fetch }) {
       }
 
       if (COLLECTIONS.includes(resource)) {
+        const denied = need(method === 'GET' ? 'data:read' : method === 'DELETE' ? 'data:delete' : 'data:write');
+        if (denied) return denied;
         if (!id && method === 'GET') return json(await repo.list(`${resource}/`));
         if (!id && method === 'POST') {
           const now = new Date().toISOString();

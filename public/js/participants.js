@@ -1,5 +1,5 @@
 import { mount, h, field, readForm, table, badge, fullName, isMinor, fmtDate, money, toast, confirmDialog } from './ui.js';
-import { api } from './api.js';
+import { api, can } from './api.js';
 import { ENUMS, pageHead, backLink, dateField } from './common.js';
 import { lookupZip } from './external.js';
 
@@ -84,7 +84,7 @@ export async function edit(root, id) {
     h('div', { class: 'actions' },
       h('button', { class: 'btn primary', type: 'submit' }, 'Save participant'),
       h('a', { class: 'btn', href: '#/participants' }, 'Cancel'),
-      rec.id && h('button', { class: 'btn danger', type: 'button', onclick: async () => {
+      rec.id && can('data:delete') && h('button', { class: 'btn danger', type: 'button', onclick: async () => {
         if (!(await confirmDialog('Delete participant?', `This permanently removes ${fullName(rec)} and cannot be undone.`, 'Delete', true))) return;
         try { await api.remove('participants', rec.id); toast('Participant deleted'); location.hash = '#/participants'; } catch (e) { toast(e.message, true); }
       } }, 'Delete')));

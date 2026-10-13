@@ -164,3 +164,9 @@ dialog::backdrop { background: rgba(0,0,0,.5); }
   :root[data-theme="dark"] { --bg: #fff; --surface: #fff; --surface-2: #eee; --text: #000; --muted: #444; --border: #bbb; --primary: #00778b; }
 }
 [hidden] { display: none !important; }
+.tabbar { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1rem; }
+.tabbar .btn[aria-selected="true"] { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+.dot { display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .4rem; background: var(--muted); }
+.dot.ok { background: var(--ok); } .dot.bad { background: var(--danger); } .dot.warn { background: var(--warn); }
+td select { min-height: 32px; padding: .15rem .4rem; }
+.row-actions { display: flex; flex-wrap: wrap; gap: .35rem; }

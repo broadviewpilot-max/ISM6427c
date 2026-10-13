@@ -28,5 +28,5 @@ export function makeClient(env = ENV, fetchImpl, blobs = memoryBlobs()) {
     if (sc) cookie = sc.split(';')[0];
     return { status: res.status, body: await res.json() };
   };
-  return { call, blobs, login: () => call('POST', '/api/login', { password: env.APP_PASSWORD }), clearCookie: () => { cookie = ''; } };
+  return { call, blobs, login: () => call('POST', '/api/login', { password: env.APP_PASSWORD }), clearCookie: () => { cookie = ''; }, getCookie: () => cookie, setCookie: (c) => { cookie = c; } };
 }

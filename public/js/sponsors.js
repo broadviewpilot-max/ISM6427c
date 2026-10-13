@@ -1,5 +1,5 @@
 import { mount, h, field, readForm, table, badge, fmtDate, money, toast, confirmDialog, daysFrom, today } from './ui.js';
-import { api } from './api.js';
+import { api, can } from './api.js';
 import { ENUMS, pageHead, backLink, dateField, contactLogCard, lastContact } from './common.js';
 
 export const total = (s, from = '', to = '9999-12-31') => s.contributions.filter((c) => c.kind !== 'Pledge' && c.date >= from && c.date <= to).reduce((n, c) => n + (c.amount || 0), 0);
@@ -53,7 +53,7 @@ export async function edit(root, id) {
     h('div', { class: 'actions' },
       h('button', { class: 'btn primary', type: 'submit' }, 'Save'),
       h('a', { class: 'btn', href: '#/sponsors' }, 'Cancel'),
-      rec.id && h('button', { class: 'btn danger', type: 'button', onclick: async () => {
+      rec.id && can('data:delete') && h('button', { class: 'btn danger', type: 'button', onclick: async () => {
         if (!(await confirmDialog('Delete record?', `This permanently removes ${rec.name}, including contribution and contact history.`, 'Delete', true))) return;
         try { await api.remove('sponsors', rec.id); toast('Record deleted'); location.hash = '#/sponsors'; } catch (e) { toast(e.message, true); }
       } }, 'Delete')));

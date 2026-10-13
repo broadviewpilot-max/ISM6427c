@@ -1,5 +1,7 @@
 // Shared password-gate logic. Uses only Web Crypto so it runs unchanged in
 // Netlify Edge Functions (Deno) and Netlify Functions (Node).
+import { adminEmails } from './roles.mjs';
+
 const enc = new TextEncoder();
 
 export const COOKIE = 'aimsir_session';
@@ -80,8 +82,9 @@ export function emailSessionSeconds(env) {
 // Optional extra lock: when ALLOWED_EMAILS is set, only those addresses get in,
 // even if someone manages to create a Supabase account.
 export function emailAllowed(env, email) {
-  const list = String(env.ALLOWED_EMAILS || '').split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
-  return list.length === 0 || list.includes(String(email).toLowerCase());
+  const e = String(email).toLowerCase();
+  const list = String(env.ALLOWED_EMAILS || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+  return list.length === 0 || list.includes(e) || adminEmails(env).includes(e); // administrators can never be locked out
 }
 
 async function signUser(env, exp, uid) {

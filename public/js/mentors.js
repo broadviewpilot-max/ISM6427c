@@ -1,5 +1,5 @@
 import { mount, h, field, readForm, table, badge, fullName, fmtDate, toast, confirmDialog, daysFrom } from './ui.js';
-import { api } from './api.js';
+import { api, can } from './api.js';
 import { ENUMS, pageHead, backLink, contactLogCard, lastContact } from './common.js';
 
 export async function list(root) {
@@ -44,7 +44,7 @@ export async function edit(root, id) {
     h('div', { class: 'actions' },
       h('button', { class: 'btn primary', type: 'submit' }, 'Save mentor'),
       h('a', { class: 'btn', href: '#/mentors' }, 'Cancel'),
-      rec.id && h('button', { class: 'btn danger', type: 'button', onclick: async () => {
+      rec.id && can('data:delete') && h('button', { class: 'btn danger', type: 'button', onclick: async () => {
         if (!(await confirmDialog('Delete mentor?', `This permanently removes ${rec.name}. ${mentees.length ? `${mentees.length} paired participant(s) will be left without a mentor.` : ''}`, 'Delete', true))) return;
         try { await api.remove('mentors', rec.id); toast('Mentor deleted'); location.hash = '#/mentors'; } catch (e) { toast(e.message, true); }
       } }, 'Delete')));
