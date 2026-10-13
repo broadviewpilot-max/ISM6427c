@@ -17,8 +17,7 @@ export function memoryBlobs() {
   };
 }
 
-export function makeClient(env = ENV, fetchImpl) {
-  const blobs = memoryBlobs();
+export function makeClient(env = ENV, fetchImpl, blobs = memoryBlobs()) {
   const handle = createHandler({ env, blobs, fetchImpl });
   let cookie = '';
   const call = async (method, path, body, extra = {}) => {

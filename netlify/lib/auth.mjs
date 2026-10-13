@@ -88,8 +88,11 @@ async function signUser(env, exp, uid) {
   return hmac(env.SESSION_SECRET, `u1.${exp}.${uid}`);
 }
 
+// Stable, non-reversible key for a Supabase user; names that user's profile record.
+export const userKey = async (userId) => (await sha256Hex(String(userId))).slice(0, 32);
+
 export async function makeUserToken(env, userId, now = Date.now()) {
-  const uid = (await sha256Hex(String(userId))).slice(0, 32);
+  const uid = await userKey(userId);
   const exp = Math.floor(now / 1000) + emailSessionSeconds(env);
   return `u.${exp}.${uid}.${await signUser(env, exp, uid)}`;
 }
@@ -107,6 +110,12 @@ export function parseCookies(header = '') {
     if (i > 0) out[part.slice(0, i).trim()] = part.slice(i + 1).trim();
   }
   return out;
+}
+
+// The signed-in email user's key, or null for a board-password session.
+export async function userIdFromRequest(env, req) {
+  const token = parseCookies(req.headers.get('cookie') || '')[COOKIE];
+  return typeof token === 'string' && token.startsWith('u.') && (await verifyToken(env, token)) ? token.split('.')[2] : null;
 }
 
 export const isAuthed = (env, req) => verifyToken(env, parseCookies(req.headers.get('cookie') || '')[COOKIE]);

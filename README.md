@@ -50,6 +50,10 @@ Invited people can sign in with their own email and password, alongside the shar
 
 Email sessions last `EMAIL_SESSION_HOURS` (default 12, max 168). Removing a person in Supabase or from `ALLOWED_EMAILS` blocks new sign-ins immediately; a session already open ends when its cookie expires, so keep that short. Successful and failed email sign-ins are written to the activity log, and failed attempts share the 5-tries-then-15-minute lockout.
 
+### Profiles
+
+Each email account has its own profile (name, job title, phone; the email comes from the sign-in and can't be edited). It is created automatically at first sign-in and edited under **My profile**. Profiles are stored with the rest of the app's data, encrypted in Netlify Blobs, keyed by a one-way hash of the Supabase user id; people can only read and change their own. The dashboard greeting uses the profile name, and the activity log (Settings) shows who made each change: the profile name, the email if no name is set yet, or "board password" for the shared password. The shared board-password session has no profile and keeps its existing greeting. Profiles are not part of the JSON backup.
+
 ## Free, keyless public APIs
 
 No account, key or payment. Both are optional conveniences that fail silently. Only a ZIP code or a year is ever sent, never a person's data.
